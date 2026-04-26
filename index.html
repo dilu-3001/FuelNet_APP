@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NetFuel · NZ &amp; AU Fuel Cost Analyser</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23ff6b1a'%3E%3Cpath d='M19 20H5v-2h14v2M5 16V4h8v12H5m9-12v3h2v9h2v-9h2V8c0-1.1-.9-2-2-2V4h-4Z'/%3E%3C/svg%3E" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  body { background: #ffffff; margin: 0; }
+  #loader { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: #ff6b1a; font-family: ui-monospace, monospace; font-size: 11px; letter-spacing: 0.3em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div id="root"><div id="loader">Loading NetFuel</div></div>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect } = React;
+
+const IconBase = ({ children, className = "w-4 h-4", strokeWidth = 2 }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    {children}
+  </svg>
+);
+const Search = (p) => <IconBase {...p}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></IconBase>;
+const Fuel = (p) => <IconBase {...p}><line x1="3" x2="15" y1="22" y2="22"/><line x1="4" x2="14" y1="9" y2="9"/><path d="M14 22V4a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v18"/><path d="M14 13h2a2 2 0 0 1 2 2v2a2 2 0 0 0 2 2 2 2 0 0 0 2-2V9.83a2 2 0 0 0-.59-1.42L18 5"/></IconBase>;
+const TrendingDown = (p) => <IconBase {...p}><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></IconBase>;
+const MapPin = (p) => <IconBase {...p}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></IconBase>;
+const Gauge = (p) => <IconBase {...p}><path d="m12 14 4-4"/><path d="M3.34 19a10 10 0 1 1 17.32 0"/></IconBase>;
+const Calendar = (p) => <IconBase {...p}><rect width="18" height="18" x="3" y="4" rx="2" ry="2"/><line x1="16" x2="16" y1="2" y2="6"/><line x1="8" x2="8" y1="2" y2="6"/><line x1="3" x2="21" y1="10" y2="10"/></IconBase>;
+const Settings2 = (p) => <IconBase {...p}><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></IconBase>;
+const Loader2 = (p) => <IconBase {...p}><path d="M21 12a9 9 0 1 1-6.219-8.56"/></IconBase>;
+const ArrowRight = (p) => <IconBase {...p}><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></IconBase>;
+const Leaf = (p) => <IconBase {...p}><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19.2 2.96a1 1 0 0 1 1.8.4 21.2 21.2 0 0 1-2.7 16.5c-1.7 2.7-5.6 4.5-9.5 4.5-2.7 0-5.4-1.5-7-3"/><path d="M2 21c0-3 1.85-5.36 5.08-6C9.5 14.52 12 13 13 12"/></IconBase>;
+const Flame = (p) => <IconBase {...p}><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></IconBase>;
+
+
+// Popular NZ/AU cars dataset
+const POPULAR_CARS = [
+  { brand: "Toyota", model: "Hilux", year: 2023, category: "ute", l_per_100km: 7.6, fuel_type: "diesel", engine: "2.8L Turbo Diesel", trim: "SR5 Cruiser" },
+  { brand: "Ford", model: "Ranger", year: 2023, category: "ute", l_per_100km: 7.2, fuel_type: "diesel", engine: "2.0L Bi-Turbo Diesel", trim: "Wildtrak" },
+  { brand: "Toyota", model: "RAV4 Hybrid", year: 2023, category: "suv", l_per_100km: 4.8, fuel_type: "hybrid", engine: "2.5L Hybrid AWD", trim: "GXL" },
+  { brand: "Mitsubishi", model: "Outlander PHEV", year: 2024, category: "suv", l_per_100km: 1.5, fuel_type: "plug-in hybrid", engine: "2.4L PHEV", trim: "VRX" },
+  { brand: "Toyota", model: "Corolla Hybrid", year: 2023, category: "hatch", l_per_100km: 4.2, fuel_type: "hybrid", engine: "1.8L Hybrid", trim: "ZR" },
+  { brand: "Mazda", model: "CX-5", year: 2023, category: "suv", l_per_100km: 7.5, fuel_type: "petrol", engine: "2.5L SkyActiv", trim: "GSX" },
+  { brand: "Kia", model: "Sportage", year: 2024, category: "suv", l_per_100km: 7.2, fuel_type: "petrol", engine: "2.0L MPi", trim: "LX" },
+  { brand: "Hyundai", model: "Tucson", year: 2023, category: "suv", l_per_100km: 7.7, fuel_type: "petrol", engine: "2.0L MPi", trim: "Active" },
+  { brand: "Toyota", model: "Highlander Hybrid", year: 2023, category: "suv", l_per_100km: 5.6, fuel_type: "hybrid", engine: "2.5L Hybrid AWD", trim: "Limited" },
+  { brand: "Mitsubishi", model: "Triton", year: 2023, category: "ute", l_per_100km: 8.6, fuel_type: "diesel", engine: "2.4L MIVEC Diesel", trim: "GLX-R" },
+  { brand: "Nissan", model: "Navara", year: 2023, category: "ute", l_per_100km: 7.7, fuel_type: "diesel", engine: "2.3L Twin Turbo", trim: "ST-X" },
+  { brand: "Toyota", model: "Camry Hybrid", year: 2023, category: "sedan", l_per_100km: 4.2, fuel_type: "hybrid", engine: "2.5L Hybrid", trim: "SX" },
+  { brand: "Honda", model: "CR-V", year: 2023, category: "suv", l_per_100km: 7.4, fuel_type: "petrol", engine: "1.5L Turbo VTEC", trim: "Sport" },
+  { brand: "Mazda", model: "BT-50", year: 2023, category: "ute", l_per_100km: 8.0, fuel_type: "diesel", engine: "3.0L Turbo Diesel", trim: "GTX" },
+  { brand: "Subaru", model: "Outback", year: 2023, category: "wagon", l_per_100km: 7.3, fuel_type: "petrol", engine: "2.5L Boxer AWD", trim: "Premium" },
+  { brand: "Toyota", model: "Yaris Cross Hybrid", year: 2023, category: "suv", l_per_100km: 3.8, fuel_type: "hybrid", engine: "1.5L Hybrid", trim: "Limited" },
+  { brand: "Suzuki", model: "Swift", year: 2023, category: "hatch", l_per_100km: 4.6, fuel_type: "petrol", engine: "1.2L DualJet", trim: "GLX" },
+  { brand: "Nissan", model: "X-Trail", year: 2024, category: "suv", l_per_100km: 7.8, fuel_type: "petrol", engine: "2.5L MR25DD", trim: "ST-L" },
+  { brand: "Mazda", model: "3", year: 2023, category: "hatch", l_per_100km: 6.0, fuel_type: "petrol", engine: "2.0L SkyActiv", trim: "GSX" },
+  { brand: "Kia", model: "Sorento", year: 2023, category: "suv", l_per_100km: 9.7, fuel_type: "petrol", engine: "3.5L V6", trim: "Premium" },
+  { brand: "Toyota", model: "LandCruiser Prado", year: 2023, category: "suv", l_per_100km: 9.0, fuel_type: "diesel", engine: "2.8L Turbo Diesel", trim: "VX" },
+  { brand: "Volkswagen", model: "Amarok", year: 2023, category: "ute", l_per_100km: 7.6, fuel_type: "diesel", engine: "2.0L TDI", trim: "Style" },
+];
+
+// Top 3 cars to feature on landing (NZ best-sellers across categories)
+const TOP_THREE = POPULAR_CARS.filter(c => 
+  (c.brand === "Ford" && c.model === "Ranger") ||
+  (c.brand === "Toyota" && c.model === "Hilux") ||
+  (c.brand === "Toyota" && c.model === "RAV4 Hybrid")
+);
+
+// Category styling and SVG illustration
+const CATEGORY_META = {
+  ute: { label: "Ute", color: "#ff6b1a" },
+  suv: { label: "SUV", color: "#3b82f6" },
+  sedan: { label: "Sedan", color: "#a855f7" },
+  hatch: { label: "Hatchback", color: "#10b981" },
+  wagon: { label: "Wagon", color: "#eab308" },
+  coupe: { label: "Coupe", color: "#ec4899" },
+};
+
+const FUEL_BADGE = {
+  petrol: { label: "Petrol", bg: "rgba(255, 107, 26, 0.12)", color: "#ff8a4c" },
+  diesel: { label: "Diesel", bg: "rgba(168, 85, 247, 0.12)", color: "#c084fc" },
+  hybrid: { label: "Hybrid", bg: "rgba(16, 185, 129, 0.14)", color: "#34d399" },
+  "plug-in hybrid": { label: "PHEV", bg: "rgba(16, 185, 129, 0.14)", color: "#34d399" },
+  electric: { label: "EV", bg: "rgba(59, 130, 246, 0.14)", color: "#60a5fa" },
+};
+
+// Fuel gauge: visual position from efficient (left) to thirsty (right)
+const FuelGauge = ({ value }) => {
+  // Scale: 3 L/100km = far left (efficient), 13 L/100km = far right (thirsty)
+  const min = 3, max = 13;
+  const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
+  const color = value < 5 ? "#34d399" : value < 7 ? "#a3e635" : value < 9 ? "#facc15" : "#f87171";
+  return (
+    <div className="w-full">
+      <div className="flex justify-between text-[8px] font-mono uppercase tracking-widest text-[#a3a3a3] mb-1.5">
+        <span>Efficient</span>
+        <span>Thirsty</span>
+      </div>
+      <div className="relative h-1.5 bg-black/10 overflow-hidden" style={{ borderRadius: "1px" }}>
+        <div className="absolute inset-y-0 left-0" style={{ width: "100%", background: "linear-gradient(90deg, #34d39922 0%, #a3e63522 33%, #facc1522 66%, #f8717122 100%)" }}></div>
+        <div className="absolute top-0 bottom-0 w-0.5" style={{ left: `${pct}%`, background: color, boxShadow: `0 0 8px ${color}` }}></div>
+      </div>
+    </div>
+  );
+};
+
+// Region config
+const REGIONS = {
+  NZ: { label: "New Zealand", currency: "NZD", symbol: "$", fuel_price: 3.00, annual_km: 14000, flag: "🇳🇿" },
+  AU: { label: "Australia", currency: "AUD", symbol: "$", fuel_price: 2.30, annual_km: 14000, flag: "🇦🇺" },
+};
+
+const calculateAnnualCost = (l_per_100km, region) => {
+  const r = REGIONS[region];
+  return (r.annual_km / 100) * l_per_100km * r.fuel_price;
+};
+
+const formatCurrency = (n, region) => {
+  const r = REGIONS[region];
+  return `${r.symbol}${Math.round(n).toLocaleString("en-NZ")}`;
+};
+
+// Helpers for cascading dropdowns
+const getUniqueBrands = () => [...new Set(POPULAR_CARS.map(c => c.brand))].sort();
+const getModelsForBrand = (brand) => [...new Set(POPULAR_CARS.filter(c => c.brand === brand).map(c => c.model))].sort();
+const getYearsForBrandModel = (brand, model) => {
+  const exact = POPULAR_CARS.filter(c => c.brand === brand && c.model === model).map(c => c.year);
+  const baseYear = exact[0] || new Date().getFullYear();
+  // Provide a reasonable range around the dataset year (consumption stable across same generation)
+  const years = [];
+  for (let y = baseYear + 2; y >= baseYear - 5; y--) years.push(y);
+  return years;
+};
+
+// km/L = 100 / L per 100km
+const calculateKmPerL = (l_per_100km) => (100 / l_per_100km).toFixed(2);
+
+// Find alternatives in dataset
+const findAlternatives = (car, dataset) => {
+  return dataset
+    .filter(c => 
+      c.category === car.category && 
+      c.l_per_100km < car.l_per_100km &&
+      !(c.brand === car.brand && c.model === car.model)
+    )
+    .sort((a, b) => a.l_per_100km - b.l_per_100km)
+    .slice(0, 3);
+};
+
+// AI lookup goes through /api/fuel-lookup serverless function
+// The Gemini API key lives in Vercel env vars (GEMINI_API_KEY), never in this HTML
+
+// AI fallback via our /api/fuel-lookup serverless function
+async function fetchCarFromAI(brand, model, year) {
+  const response = await fetch("/api/fuel-lookup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ brand, model, year }),
+  });
+
+  if (!response.ok) {
+    let errMsg = `Server error: ${response.status}`;
+    try {
+      const data = await response.json();
+      if (data.error) errMsg = data.error;
+    } catch {}
+    throw new Error(errMsg);
+  }
+
+  return response.json();
+}
+
+// Find car in dataset (case-insensitive partial match)
+function findInDataset(brand, model, year) {
+  const b = brand.trim().toLowerCase();
+  const m = model.trim().toLowerCase();
+  const y = parseInt(year);
+  
+  return POPULAR_CARS.find(c => 
+    c.brand.toLowerCase() === b &&
+    (c.model.toLowerCase() === m || c.model.toLowerCase().includes(m) || m.includes(c.model.toLowerCase().split(" ")[0])) &&
+    Math.abs(c.year - y) <= 1
+  );
+}
+
+function CarCard({ car, onClick, region, compact }) {
+  const meta = CATEGORY_META[car.category] || CATEGORY_META.sedan;
+  const fuelMeta = FUEL_BADGE[car.fuel_type] || FUEL_BADGE.petrol;
+  const annualCost = calculateAnnualCost(car.l_per_100km, region);
+  const lPerKm = (car.l_per_100km / 100).toFixed(4);
+  const kmPerL = calculateKmPerL(car.l_per_100km);
+
+  return (
+    <div
+      onClick={onClick}
+      className="group relative bg-white border border-[#e5e5e5] hover:border-[#a3a3a3] cursor-pointer transition-all duration-200 overflow-hidden"
+      style={{ borderRadius: "2px" }}
+    >
+      {/* Stat header */}
+      <div className="relative h-44 bg-gradient-to-br from-[#fafafa] to-[#f0f0f0] flex flex-col justify-between p-5 overflow-hidden">
+        <div className="relative flex justify-between items-start">
+          <div className="flex gap-1.5">
+            <span className="text-[10px] font-bold tracking-widest uppercase px-2 py-1" style={{ background: `${meta.color}22`, color: meta.color, borderRadius: "1px" }}>
+              {meta.label}
+            </span>
+            <span className="text-[10px] font-bold tracking-widest uppercase px-2 py-1" style={{ background: fuelMeta.bg, color: fuelMeta.color, borderRadius: "1px" }}>
+              {fuelMeta.label}
+            </span>
+          </div>
+          <div className="text-[10px] font-mono text-[#737373] tracking-wider">
+            {car.year}
+          </div>
+        </div>
+
+        <div className="relative">
+          <div className="flex items-baseline gap-2 mb-3">
+            <span className="text-5xl font-black text-[#0a0a0b] leading-none" style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: "-0.02em" }}>
+              {car.l_per_100km}
+            </span>
+            <span className="text-[10px] font-mono uppercase tracking-widest text-[#737373]">
+              L/100km
+            </span>
+          </div>
+          <FuelGauge value={car.l_per_100km} />
+        </div>
+      </div>
+
+      {/* Info */}
+      <div className="p-4 space-y-3">
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#737373] mb-1">{car.brand}</div>
+          <h3 className="text-lg font-bold text-[#0a0a0b] leading-tight" style={{ fontFamily: "'Archivo', sans-serif", letterSpacing: "-0.01em" }}>
+            {car.model}
+          </h3>
+          <p className="text-xs text-[#737373] mt-1">{car.engine}{car.trim ? ` · ${car.trim}` : ""}</p>
+        </div>
+
+        <div className="flex items-end justify-between pt-3 border-t border-[#e5e5e5]">
+          <div>
+            <div className="text-[9px] font-mono uppercase tracking-widest text-[#737373] mb-1">Annual fuel cost</div>
+            <div className="text-xl font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#ff6b1a" }}>
+              {formatCurrency(annualCost, region)}
+            </div>
+          </div>
+          <div className="text-right space-y-0.5">
+            <div>
+              <span className="text-[9px] font-mono uppercase tracking-widest text-[#737373] mr-1.5">km/L</span>
+              <span className="text-sm font-mono text-[#525252]">{kmPerL}</span>
+            </div>
+            <div>
+              <span className="text-[9px] font-mono uppercase tracking-widest text-[#737373] mr-1.5">L/km</span>
+              <span className="text-sm font-mono text-[#525252]">{lPerKm}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end pt-1 text-[11px]">
+          <span className="text-[#ff6b1a] font-mono uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+            Analyse <ArrowRight className="w-3 h-3" />
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResultPanel({ result, region, onClose }) {
+  if (!result) return null;
+  const meta = CATEGORY_META[result.category] || CATEGORY_META.sedan;
+  const fuelMeta = FUEL_BADGE[result.fuel_type] || FUEL_BADGE.petrol;
+  const r = REGIONS[region];
+  const annualCost = calculateAnnualCost(result.l_per_100km, region);
+  const lPerKm = (result.l_per_100km / 100).toFixed(4);
+  const kmPerL = calculateKmPerL(result.l_per_100km);
+  const monthlyCost = annualCost / 12;
+  const dailyCost = annualCost / 365;
+  
+  // efficient indicator
+  const efficiency = result.l_per_100km < 5 ? "excellent" : result.l_per_100km < 7 ? "good" : result.l_per_100km < 9 ? "average" : "thirsty";
+  const efficiencyColors = {
+    excellent: { bg: "rgba(16, 185, 129, 0.12)", color: "#34d399", icon: <Leaf className="w-4 h-4" /> },
+    good: { bg: "rgba(132, 204, 22, 0.12)", color: "#a3e635" },
+    average: { bg: "rgba(234, 179, 8, 0.12)", color: "#facc15" },
+    thirsty: { bg: "rgba(248, 113, 113, 0.12)", color: "#f87171", icon: <Flame className="w-4 h-4" /> },
+  };
+  const eff = efficiencyColors[efficiency];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-md" style={{ background: "rgba(0,0,0,0.7)" }} onClick={onClose}>
+      <div 
+        className="max-w-3xl w-full max-h-[90vh] overflow-y-auto"
+        style={{ borderRadius: "2px", boxShadow: "0 20px 60px rgba(0, 0, 0, 0.5)", background: "#0d2818", border: "1px solid rgba(255,255,255,0.12)", color: "#ffffff" }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header banner */}
+        <div className="relative overflow-hidden" style={{ background: "linear-gradient(135deg, #14352a 0%, #0d2818 100%)", borderBottom: "1px solid rgba(255,255,255,0.12)" }}>
+          <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-10">
+            <div className="flex gap-1.5">
+              <span className="text-[10px] font-bold tracking-widest uppercase px-2 py-1" style={{ background: "rgba(255,255,255,0.12)", color: "#ffffff", borderRadius: "1px" }}>
+                {meta.label}
+              </span>
+              <span className="text-[10px] font-bold tracking-widest uppercase px-2 py-1" style={{ background: "rgba(255,255,255,0.12)", color: "#ffffff", borderRadius: "1px" }}>
+                {fuelMeta.label}
+              </span>
+            </div>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-sm font-bold transition-colors" style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", color: "#ffffff", borderRadius: "2px" }} onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.18)"; }} onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}>
+              ✕
+            </button>
+          </div>
+
+          <div className="relative px-8 pt-16 pb-8">
+            <div className="text-xs font-mono uppercase tracking-[0.25em] mb-2" style={{ color: "rgba(255,255,255,0.6)" }}>{result.brand} · {result.year}</div>
+            <h2 className="text-5xl md:text-6xl font-black leading-[0.9] mb-6" style={{ fontFamily: "'Archivo', sans-serif", letterSpacing: "-0.03em", color: "#ffffff" }}>
+              {result.model}
+            </h2>
+            <div className="flex items-end justify-between gap-6 flex-wrap">
+              <div>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-6xl font-black leading-none" style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: "-0.03em", color: "#ffffff" }}>
+                    {result.l_per_100km}
+                  </span>
+                  <span className="text-xs font-mono uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.6)" }}>
+                    L/100km
+                  </span>
+                </div>
+                <p className="text-sm" style={{ color: "rgba(255,255,255,0.75)" }}>{result.engine}{result.trim ? ` · ${result.trim}` : ""}</p>
+              </div>
+              <div className="w-full max-w-xs">
+                <FuelGauge value={result.l_per_100km} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-8 space-y-8">
+          {/* Efficiency banner */}
+          <div className="flex items-center gap-3 px-4 py-3 border-l-2" style={{ background: "rgba(255,255,255,0.06)", borderColor: "#ffffff" }}>
+            <span style={{ color: "#ffffff" }}>{eff.icon || <Gauge className="w-4 h-4" />}</span>
+            <div className="flex-1">
+              <div className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.6)" }}>Efficiency Rating</div>
+              <div className="font-bold capitalize" style={{ fontFamily: "'Archivo', sans-serif", color: "#ffffff" }}>{efficiency}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.6)" }}>vs Class Average</div>
+              <div className="text-xs font-mono" style={{ color: "#ffffff" }}>
+                {result.l_per_100km < 7.5 ? "↓" : "↑"} {Math.abs(((result.l_per_100km - 7.5) / 7.5) * 100).toFixed(0)}%
+              </div>
+            </div>
+          </div>
+
+          {/* Metrics grid */}
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] mb-3" style={{ color: "rgba(255,255,255,0.6)" }}>Efficiency Metrics</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-5">
+              <MetricBox label="L/100km" value={result.l_per_100km} unit="" />
+              <MetricBox label="km/L" value={kmPerL} unit="" />
+              <MetricBox label="L/km" value={lPerKm} unit="" />
+            </div>
+            <div className="text-[10px] font-mono uppercase tracking-[0.2em] mb-3" style={{ color: "rgba(255,255,255,0.6)" }}>Cost ({r.currency})</div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <MetricBox label="Annual fuel" value={formatCurrency(annualCost, region)} unit="" highlight />
+              <MetricBox label="Per month" value={formatCurrency(monthlyCost, region)} unit="" />
+              <MetricBox label="Per day" value={formatCurrency(dailyCost, region)} unit="" />
+            </div>
+          </div>
+
+          {/* Cost breakdown */}
+          <div className="p-5" style={{ borderRadius: "2px", border: "1px solid rgba(255,255,255,0.12)" }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Settings2 className="w-4 h-4" style={{ color: "#ffffff" }} />
+              <h3 className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: "#ffffff" }}>Calculation Breakdown</h3>
+            </div>
+            <div className="space-y-2 text-sm font-mono">
+              <CalcRow label="Annual distance" value={`${r.annual_km.toLocaleString("en-NZ")} km`} note={`${r.label} regional average`} />
+              <CalcRow label="Fuel price" value={`${r.symbol}${r.fuel_price.toFixed(2)} ${r.currency}`} note="per litre, current average" />
+              <CalcRow label="Consumption" value={`${result.l_per_100km} L/100km`} note="combined cycle" />
+              <CalcRow label="Range per litre" value={`${kmPerL} km/L`} note={`100 ÷ ${result.l_per_100km}`} />
+              <div className="pt-2 mt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.12)" }}></div>
+              <CalcRow label="Annual fuel cost" value={formatCurrency(annualCost, region)} note={`(${r.annual_km.toLocaleString("en-NZ")}/100) × ${result.l_per_100km} × ${r.symbol}${r.fuel_price.toFixed(2)}`} highlight />
+              <CalcRow label="Per day" value={formatCurrency(dailyCost, region)} note={`across ${r.label}`} />
+            </div>
+          </div>
+
+          {/* Alternatives */}
+          {result.alternatives && result.alternatives.length > 0 && (
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingDown className="w-4 h-4" style={{ color: "#ffffff" }} />
+                <h3 className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: "#ffffff" }}>More Efficient Alternatives</h3>
+              </div>
+              <div className="space-y-2">
+                {result.alternatives.map((alt, i) => {
+                  const altCost = calculateAnnualCost(alt.l_per_100km, region);
+                  const saving = annualCost - altCost;
+                  return (
+                    <div key={i} className="flex items-center justify-between p-3 transition-colors" style={{ borderRadius: "2px", border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)" }}>
+                      <div className="flex-1">
+                        <div className="text-[10px] font-mono uppercase tracking-widest" style={{ color: "rgba(255,255,255,0.6)" }}>{alt.brand} · {alt.year}</div>
+                        <div className="font-bold" style={{ fontFamily: "'Archivo', sans-serif", color: "#ffffff" }}>{alt.model}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono text-sm" style={{ color: "#ffffff" }}>{alt.l_per_100km} L/100km</div>
+                        <div className="text-[11px] font-mono font-bold" style={{ color: "#ffffff" }}>save {formatCurrency(saving, region)}/yr</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div className="text-[10px] font-mono uppercase tracking-widest text-center pt-4" style={{ color: "rgba(255,255,255,0.4)", borderTop: "1px solid rgba(255,255,255,0.12)" }}>
+            Estimates based on combined cycle data · Actual usage varies with driving conditions
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricBox({ label, value, unit, highlight }) {
+  return (
+    <div className="p-4" style={{ borderRadius: "2px", border: highlight ? "1px solid rgba(255,255,255,0.4)" : "1px solid rgba(255,255,255,0.15)", background: highlight ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.03)" }}>
+      <div className="text-[9px] font-mono uppercase tracking-widest mb-1" style={{ color: "rgba(255,255,255,0.6)" }}>{label}</div>
+      <div className="text-2xl font-bold" style={{ fontFamily: "'JetBrains Mono', monospace", color: "#ffffff" }}>
+        {value}{unit && <span className="text-xs ml-1" style={{ color: "rgba(255,255,255,0.6)" }}>{unit}</span>}
+      </div>
+    </div>
+  );
+}
+
+function CalcRow({ label, value, note, highlight }) {
+  return (
+    <div className="flex justify-between items-baseline gap-4">
+      <div className="flex-1">
+        <div style={{ color: highlight ? "#ffffff" : "rgba(255,255,255,0.75)", fontWeight: highlight ? 700 : 400 }}>{label}</div>
+        {note && <div className="text-[10px] font-sans" style={{ color: "rgba(255,255,255,0.4)" }}>{note}</div>}
+      </div>
+      <div style={{ color: "#ffffff", fontWeight: highlight ? 700 : 400, fontSize: highlight ? "16px" : "14px" }}>{value}</div>
+    </div>
+  );
+}
+
+function Select({ value, onChange, options, placeholder, disabled, mono }) {
+  return (
+    <div className="relative">
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        className={`w-full bg-white border border-[#e5e5e5] focus:border-[#ff6b1a] disabled:opacity-50 disabled:cursor-not-allowed px-4 py-3 pr-10 text-sm text-[#0a0a0b] outline-none transition-colors appearance-none cursor-pointer`}
+        style={{ borderRadius: "2px", fontFamily: mono ? "'JetBrains Mono', monospace" : "'Manrope', sans-serif", color: value ? "#0a0a0b" : "#a3a3a3" }}
+      >
+        <option value="" disabled>{placeholder}</option>
+        {options.map(opt => (
+          <option key={opt} value={opt} style={{ color: "#0a0a0b", background: "#ffffff" }}>{opt}</option>
+        ))}
+      </select>
+      <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#737373]">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+          <path d="M2.5 4.5L6 8L9.5 4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function FuelApp() {
+  const [region, setRegion] = useState("NZ");
+  const [searchMode, setSearchMode] = useState("browse"); // "browse" | "search"
+  const [selectedBrand, setSelectedBrand] = useState("");
+  const [selectedModel, setSelectedModel] = useState("");
+  const [selectedYear, setSelectedYear] = useState("");
+  const [brand, setBrand] = useState("");
+  const [model, setModel] = useState("");
+  const [year, setYear] = useState("");
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Inject Google Fonts
+  useEffect(() => {
+    const link = document.createElement("link");
+    link.href = "https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700&display=swap";
+    link.rel = "stylesheet";
+    document.head.appendChild(link);
+    return () => { try { document.head.removeChild(link); } catch(e) {} };
+  }, []);
+
+  const handleSearch = async () => {
+    // Pull from active mode
+    const useBrand = searchMode === "browse" ? selectedBrand : brand.trim();
+    const useModel = searchMode === "browse" ? selectedModel : model.trim();
+    const useYear = searchMode === "browse" ? selectedYear : (year.trim() || new Date().getFullYear());
+
+    if (!useBrand || !useModel) {
+      setError(searchMode === "browse" ? "Pick a brand and model" : "Enter both brand and model");
+      return;
+    }
+    setError(null);
+    setLoading(true);
+
+    try {
+      const fromDataset = findInDataset(useBrand, useModel, useYear);
+      if (fromDataset) {
+        const alts = findAlternatives(fromDataset, POPULAR_CARS);
+        setResult({ ...fromDataset, year: parseInt(useYear) || fromDataset.year, alternatives: alts });
+      } else {
+        const aiResult = await fetchCarFromAI(useBrand, useModel, useYear);
+        setResult(aiResult);
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message || "Could not retrieve data. Try checking the spelling, or pick from popular cars below.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCarClick = (car) => {
+    const alts = findAlternatives(car, POPULAR_CARS);
+    setResult({ ...car, alternatives: alts });
+  };
+
+  return (
+    <div className="min-h-screen bg-white text-[#0a0a0b]" style={{ fontFamily: "'Manrope', sans-serif" }}>
+      {/* Top bar */}
+      <header className="border-b border-[#e5e5e5] sticky top-0 z-40 bg-white/95 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 flex items-center justify-center bg-[#ff6b1a] text-[#0a0a0b]" style={{ borderRadius: "2px" }}>
+              <Fuel className="w-5 h-5" strokeWidth={2.5} />
+            </div>
+            <div>
+              <h1 className="text-base font-black tracking-tight leading-none" style={{ fontFamily: "'Archivo', sans-serif" }}>
+                NETFUEL
+              </h1>
+              <div className="text-[9px] font-mono uppercase tracking-[0.25em] text-[#737373] mt-0.5">
+                NZ · AU Fuel Cost Analyser
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Region toggle */}
+            <div className="flex border border-[#e5e5e5] p-0.5" style={{ borderRadius: "2px" }}>
+              {Object.entries(REGIONS).map(([key, r]) => (
+                <button
+                  key={key}
+                  onClick={() => setRegion(key)}
+                  className={`px-3 py-1.5 text-xs font-bold tracking-widest uppercase transition-all flex items-center gap-1.5 ${
+                    region === key ? "bg-[#ff6b1a] text-[#0a0a0b]" : "text-[#737373] hover:text-[#0a0a0b]"
+                  }`}
+                  style={{ borderRadius: "1px", fontFamily: "'JetBrains Mono', monospace" }}
+                >
+                  <span>{r.flag}</span>{key}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Hero search */}
+      <section className="border-b border-[#e5e5e5]">
+        <div className="max-w-7xl mx-auto px-6 py-12 md:py-16">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-px bg-[#ff6b1a]"></div>
+              <span className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#ff6b1a]">
+                {REGIONS[region].symbol}{REGIONS[region].fuel_price.toFixed(2)} {REGIONS[region].currency}/L · {REGIONS[region].annual_km.toLocaleString("en-NZ")} km/yr
+              </span>
+            </div>
+            <h2 className="text-5xl md:text-6xl font-black leading-[0.95] mb-3" style={{ fontFamily: "'Archivo', sans-serif", letterSpacing: "-0.03em" }}>
+              How much does
+              <br />
+              <span className="text-[#ff6b1a]">your car drink?</span>
+            </h2>
+            <p className="text-base text-[#525252] max-w-xl">
+              Real fuel consumption data and annual running costs for cars in {REGIONS[region].label}. Search any vehicle or browse popular models below.
+            </p>
+          </div>
+
+          {/* Search form */}
+          <div className="mt-10">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-[#737373]">
+                {searchMode === "browse" ? "Pick a car" : "Search any vehicle"}
+              </div>
+              <button
+                onClick={() => { setSearchMode(searchMode === "browse" ? "search" : "browse"); setError(null); }}
+                className="text-[10px] font-mono uppercase tracking-widest text-[#ff6b1a] hover:text-[#ff8541] transition-colors flex items-center gap-1"
+              >
+                {searchMode === "browse" ? "Can't find your car? Search any →" : "← Back to browse"}
+              </button>
+            </div>
+
+            {searchMode === "browse" ? (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                <div className="md:col-span-3">
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-[#737373] block mb-2">Brand</label>
+                  <Select
+                    value={selectedBrand}
+                    onChange={(v) => { setSelectedBrand(v); setSelectedModel(""); setSelectedYear(""); }}
+                    placeholder="Select brand"
+                    options={getUniqueBrands()}
+                  />
+                </div>
+                <div className="md:col-span-4">
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-[#737373] block mb-2">Model</label>
+                  <Select
+                    value={selectedModel}
+                    onChange={(v) => { setSelectedModel(v); setSelectedYear(""); }}
+                    placeholder={selectedBrand ? "Select model" : "Pick a brand first"}
+                    options={selectedBrand ? getModelsForBrand(selectedBrand) : []}
+                    disabled={!selectedBrand}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-[#737373] block mb-2">Year</label>
+                  <Select
+                    value={selectedYear}
+                    onChange={setSelectedYear}
+                    placeholder={selectedModel ? "Year" : "—"}
+                    options={selectedModel ? getYearsForBrandModel(selectedBrand, selectedModel) : []}
+                    disabled={!selectedModel}
+                    mono
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-transparent block mb-2">.</label>
+                  <button
+                    type="button"
+                    onClick={handleSearch}
+                    disabled={loading || !selectedBrand || !selectedModel || !selectedYear}
+                    className="w-full bg-[#ff6b1a] hover:bg-[#ff8541] disabled:bg-[#e5e5e5] disabled:text-[#a3a3a3] disabled:cursor-not-allowed text-[#0a0a0b] py-3 px-4 text-sm font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                    style={{ borderRadius: "2px", fontFamily: "'Archivo', sans-serif" }}
+                  >
+                    {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Analysing</> : <><Search className="w-4 h-4" /> Analyse</>}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+                <div className="md:col-span-3">
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-[#737373] block mb-2">Brand</label>
+                  <input
+                    type="text"
+                    value={brand}
+                    onChange={e => setBrand(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSearch()}
+                    placeholder="e.g. Tesla"
+                    className="w-full bg-white border border-[#e5e5e5] focus:border-[#ff6b1a] px-4 py-3 text-sm text-[#0a0a0b] placeholder-[#a3a3a3] outline-none transition-colors"
+                    style={{ borderRadius: "2px", fontFamily: "'Manrope', sans-serif" }}
+                  />
+                </div>
+                <div className="md:col-span-4">
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-[#737373] block mb-2">Model</label>
+                  <input
+                    type="text"
+                    value={model}
+                    onChange={e => setModel(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSearch()}
+                    placeholder="e.g. Model 3"
+                    className="w-full bg-white border border-[#e5e5e5] focus:border-[#ff6b1a] px-4 py-3 text-sm text-[#0a0a0b] placeholder-[#a3a3a3] outline-none transition-colors"
+                    style={{ borderRadius: "2px" }}
+                  />
+                </div>
+                <div className="md:col-span-2">
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-[#737373] block mb-2">Year</label>
+                  <input
+                    type="text"
+                    value={year}
+                    onChange={e => setYear(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleSearch()}
+                    placeholder="2023"
+                    inputMode="numeric"
+                    className="w-full bg-white border border-[#e5e5e5] focus:border-[#ff6b1a] px-4 py-3 text-sm text-[#0a0a0b] placeholder-[#a3a3a3] outline-none transition-colors"
+                    style={{ borderRadius: "2px", fontFamily: "'JetBrains Mono', monospace" }}
+                  />
+                </div>
+                <div className="md:col-span-3">
+                  <label className="text-[10px] font-mono uppercase tracking-widest text-transparent block mb-2">.</label>
+                  <button
+                    type="button"
+                    onClick={handleSearch}
+                    disabled={loading}
+                    className="w-full bg-[#ff6b1a] hover:bg-[#ff8541] disabled:bg-[#d4d4d4] text-[#0a0a0b] py-3 px-4 text-sm font-bold uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                    style={{ borderRadius: "2px", fontFamily: "'Archivo', sans-serif" }}
+                  >
+                    {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Analysing</> : <><Search className="w-4 h-4" /> Analyse with AI</>}
+                  </button>
+                </div>
+              </div>
+            )}
+            {error && <div className="mt-3 text-xs text-[#f87171] font-mono">{error}</div>}
+          </div>
+        </div>
+      </section>
+
+      {/* Popular cars */}
+      <section className="max-w-7xl mx-auto px-6 py-12">
+        <div className="mb-6">
+          <div className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#ff6b1a] mb-2">Trending in {region}</div>
+          <h3 className="text-3xl font-black" style={{ fontFamily: "'Archivo', sans-serif", letterSpacing: "-0.02em" }}>
+            Popular Cars
+          </h3>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {TOP_THREE.map((car, i) => (
+            <CarCard key={`${car.brand}-${car.model}-${i}`} car={car} onClick={() => handleCarClick(car)} region={region} />
+          ))}
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-[#e5e5e5] mt-16">
+        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-4 text-[10px] font-mono uppercase tracking-widest text-[#a3a3a3]">
+          <div>NetFuel · Estimates based on combined cycle data</div>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3" /> {REGIONS[region].label}</span>
+            <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> 26-04-2026</span>
+          </div>
+        </div>
+      </footer>
+
+      <ResultPanel result={result} region={region} onClose={() => setResult(null)} />
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<FuelApp />);
+</script>
+</body>
+</html>
